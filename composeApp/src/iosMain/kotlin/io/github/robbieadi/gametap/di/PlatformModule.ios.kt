@@ -16,6 +16,8 @@ import io.github.robbieadi.gametap.platform.IosBluetoothAccess
 import io.github.robbieadi.gametap.platform.IosHaptics
 import io.github.robbieadi.gametap.platform.IosHogpTransport
 import io.github.robbieadi.gametap.platform.IosScreenControl
+import io.github.robbieadi.gametap.platform.MotionSensor
+import io.github.robbieadi.gametap.platform.NoMotionSensor
 import io.github.robbieadi.gametap.platform.SETTINGS_FILE_NAME
 import io.github.robbieadi.gametap.platform.ScreenControl
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -33,6 +35,8 @@ actual fun platformModule(): Module = module {
     single<BluetoothAccess> { IosBluetoothAccess() }
     single<Haptics> { IosHaptics() }
     single<ScreenControl> { IosScreenControl() }
+    // No CoreMotion reader yet: nothing on iOS has been run, so its axis conventions are unchecked.
+    single<MotionSensor> { NoMotionSensor }
     single<DataStore<Preferences>> {
         PreferenceDataStoreFactory.createWithPath { documentsFile(SETTINGS_FILE_NAME) }
     }

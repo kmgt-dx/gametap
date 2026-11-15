@@ -2,12 +2,15 @@ package io.github.robbieadi.gametap.input
 
 import io.github.robbieadi.gametap.domain.GamepadSettings
 import io.github.robbieadi.gametap.domain.GamepadState
+import io.github.robbieadi.gametap.domain.Stick
+import io.github.robbieadi.gametap.gyro.GyroOutput
 import io.github.robbieadi.gametap.hid.HidDescriptor
 import io.github.robbieadi.gametap.hid.HidReportEncoder
 import io.github.robbieadi.gametap.platform.HidTransport
 import io.github.robbieadi.gametap.platform.TransportState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.concurrent.Volatile
@@ -15,7 +18,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
- * Sends a report as soon as input changes, at most once per [minIntervalMs].
+ * Sends a report as soon as input changes, at most once per [minIntervalMs]. Touch and gyro
+ * input are combined here: stick values add up after the touch response curve, triggers take
+ * the higher value.
  *
  * While [lowLatency] is on it also repeats the last report every [activeKeepAliveMs]. That traffic
  * is what keeps latency down: on an idle link, Bluetooth sniff subrating stretches the radio's
@@ -49,7 +54,7 @@ class ReportSender(
                 transport.state.first { it is TransportState.Connected }
             }
             val started = timeSource.markNow()
-            val report = encode(input.state.value)
+            val report = encode(input.state.value, input.motion.value)
             if (transport.sendReport(HidDescriptor.REPORT_ID, report)) lastSent = report
             delay(minIntervalMs.milliseconds - started.elapsedNow())
 
@@ -57,18 +62,23 @@ class ReportSender(
             val sent = lastSent
             // Past the deadline, this returns null at once and the next send is the keep-alive.
             withTimeoutOrNull(keepAliveMs.milliseconds - started.elapsedNow()) {
-                input.state.first { sent == null || !encode(it).contentEquals(sent) }
+                combine(input.state, input.motion, ::encode).first { sent == null || !it.contentEquals(sent) }
             }
         }
     }
 
-    private fun encode(state: GamepadState): ByteArray {
+    private fun encode(state: GamepadState, motion: GyroOutput): ByteArray {
         val curve = settings.value.stickCurve
         return HidReportEncoder.encode(
             state.copy(
-                leftStick = curve.apply(state.leftStick),
-                rightStick = curve.apply(state.rightStick),
+                leftStick = curve.apply(state.leftStick) + motion.leftStick,
+                rightStick = curve.apply(state.rightStick) + motion.rightStick,
+                leftTrigger = maxOf(state.leftTrigger, motion.leftTrigger),
+                rightTrigger = maxOf(state.rightTrigger, motion.rightTrigger),
             ),
         )
     }
+
+    private operator fun Stick.plus(other: Stick): Stick =
+        Stick((x + other.x).coerceIn(-1f, 1f), (y + other.y).coerceIn(-1f, 1f))
 }

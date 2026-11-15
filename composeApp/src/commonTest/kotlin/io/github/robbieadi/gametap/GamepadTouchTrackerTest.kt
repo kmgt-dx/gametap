@@ -15,6 +15,7 @@ import io.github.robbieadi.gametap.layout.GamepadControl.DpadControl
 import io.github.robbieadi.gametap.layout.GamepadControl.MenuControl
 import io.github.robbieadi.gametap.layout.GamepadControl.StickControl
 import io.github.robbieadi.gametap.layout.GamepadControl.ThrottleControl
+import io.github.robbieadi.gametap.layout.GyroButton
 import io.github.robbieadi.gametap.layout.LayoutProfile
 import io.github.robbieadi.gametap.layout.Position
 import io.github.robbieadi.gametap.layout.Shape
@@ -255,5 +256,21 @@ class GamepadTouchTrackerTest {
         assertEquals(GamepadState(), state)
         tracker.move(1, 900f, 250f)
         assertEquals(0, state.buttons, "a finger from the old layout is forgotten")
+    }
+
+    @Test
+    fun gyroButtonsAreReportedAndSendNothing() {
+        val hold = button("gyro", 800f, 250f, ButtonAction.Gyro(GyroButton.HOLD))
+        var gyroButtons: Set<GyroButton> = emptySet()
+        val tracker = GamepadTouchTracker(layoutOf(hold, menu), input, { false }, { presses++ }, { gyroButtons = it })
+            .apply { resize(1000f, 500f) }
+
+        tracker.down(1, 800f, 250f)
+        assertEquals(setOf(GyroButton.HOLD), gyroButtons)
+        assertEquals(GamepadState(), state)
+        assertEquals(1, presses)
+
+        tracker.up(1)
+        assertEquals(emptySet(), gyroButtons)
     }
 }

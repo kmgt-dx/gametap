@@ -14,6 +14,17 @@ sealed interface LayoutIssue {
     data object BlankName : LayoutIssue
 
     data object DuplicateName : LayoutIssue
+
+    /** More than one gyro binding drives [target]. */
+    data class DuplicateGyroTarget(val target: GyroTarget) : LayoutIssue
+
+    /** A stick binding with no axis, or a range outside the allowed one. */
+    data class InvalidGyroBinding(val target: GyroTarget) : LayoutIssue
+
+    data object InvalidGyroDeadzone : LayoutIssue
+
+    /** Both a Gyro on/off and a Gyro on while held button; a layout uses one way or the other. */
+    data class ConflictingGyroButtons(val ids: List<String>) : LayoutIssue
 }
 
 /**
@@ -38,6 +49,18 @@ fun LayoutProfile.validate(screen: ScreenSize, otherNames: Set<String> = emptySe
             .filterValues { it.size > 1 }
             .forEach { (side, sticks) -> add(LayoutIssue.DuplicateStick(side, sticks.map { it.id })) }
 
+        gyro.bindings.groupBy { it.target }
+            .filterValues { it.size > 1 }
+            .keys.forEach { add(LayoutIssue.DuplicateGyroTarget(it)) }
+        gyro.bindings.filterNot { it.isValid() }
+            .mapTo(LinkedHashSet()) { it.target }
+            .forEach { add(LayoutIssue.InvalidGyroBinding(it)) }
+        if (gyro.deadzone !in 0f..GyroSetup.MAX_DEADZONE) add(LayoutIssue.InvalidGyroDeadzone)
+        val switches = controls.filter { (it as? GamepadControl.ButtonControl)?.action in GYRO_SWITCHES }
+        if (switches.mapTo(HashSet()) { (it as GamepadControl.ButtonControl).action }.size > 1) {
+            add(LayoutIssue.ConflictingGyroButtons(switches.map { it.id }))
+        }
+
         val areas = controls.map { it.id to it.area(screen) }
         for ((id, area) in areas) {
             if (!area.isInside(screen)) add(LayoutIssue.OffScreen(id))
@@ -51,6 +74,14 @@ fun LayoutProfile.validate(screen: ScreenSize, otherNames: Set<String> = emptySe
         }
     }
 
+/** The button actions that turn gyro on. A layout may use only one of them. */
+val GYRO_SWITCHES: Set<ButtonAction> = setOf(ButtonAction.Gyro(GyroButton.TOGGLE), ButtonAction.Gyro(GyroButton.HOLD))
+
+private fun GyroBinding.isValid(): Boolean {
+    if (range !in GyroBinding.MIN_RANGE..GyroBinding.MAX_RANGE) return false
+    return this !is GyroBinding.StickBinding || horizontal || vertical
+}
+
 /**
  * The issues that depend on the screen: what makes a stored profile not fit the current window,
  * after a fold, split screen or a restored backup. Name and structure issues are left out: the
@@ -59,6 +90,10 @@ fun LayoutProfile.validate(screen: ScreenSize, otherNames: Set<String> = emptySe
 fun LayoutProfile.screenIssues(screen: ScreenSize): List<LayoutIssue> =
     validate(screen).filter { it is LayoutIssue.Overlap || it is LayoutIssue.OffScreen }
 
+/** Issues the gyro panel fixes, rather than a control or the name. */
+val LayoutIssue.isGyro: Boolean
+    get() = this is LayoutIssue.DuplicateGyroTarget || this is LayoutIssue.InvalidGyroBinding || this == LayoutIssue.InvalidGyroDeadzone
+
 /** The ids of every control an issue names, for highlighting. */
 fun List<LayoutIssue>.controlIds(): Set<String> = flatMapTo(HashSet()) { issue ->
     when (issue) {
@@ -66,6 +101,9 @@ fun List<LayoutIssue>.controlIds(): Set<String> = flatMapTo(HashSet()) { issue -
         is LayoutIssue.OffScreen -> listOf(issue.id)
         is LayoutIssue.DuplicateStick -> issue.ids
         is LayoutIssue.DuplicateId -> listOf(issue.id)
-        is LayoutIssue.MenuCount, LayoutIssue.BlankName, LayoutIssue.DuplicateName -> emptyList()
+        is LayoutIssue.ConflictingGyroButtons -> issue.ids
+        is LayoutIssue.MenuCount, LayoutIssue.BlankName, LayoutIssue.DuplicateName,
+        is LayoutIssue.DuplicateGyroTarget, is LayoutIssue.InvalidGyroBinding, LayoutIssue.InvalidGyroDeadzone,
+        -> emptyList()
     }
 }

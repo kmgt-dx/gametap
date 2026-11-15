@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,7 +67,14 @@ import io.github.robbieadi.gametap.layout.EditorMetrics
 import io.github.robbieadi.gametap.layout.EditorState
 import io.github.robbieadi.gametap.layout.GamepadControl
 import io.github.robbieadi.gametap.layout.Guide
+import io.github.robbieadi.gametap.layout.GyroAxis
+import io.github.robbieadi.gametap.layout.GyroBinding
+import io.github.robbieadi.gametap.layout.GyroButton
+import io.github.robbieadi.gametap.layout.GyroHorizontal
+import io.github.robbieadi.gametap.layout.GyroSetup
+import io.github.robbieadi.gametap.layout.GyroTarget
 import io.github.robbieadi.gametap.layout.LayoutEditor
+import io.github.robbieadi.gametap.layout.GYRO_SWITCHES
 import io.github.robbieadi.gametap.layout.LayoutIssue
 import io.github.robbieadi.gametap.layout.NewControl
 import io.github.robbieadi.gametap.layout.ScreenSize
@@ -74,6 +83,7 @@ import io.github.robbieadi.gametap.layout.Side
 import io.github.robbieadi.gametap.layout.area
 import io.github.robbieadi.gametap.layout.centerX
 import io.github.robbieadi.gametap.layout.controlIds
+import io.github.robbieadi.gametap.layout.isGyro
 import io.github.robbieadi.gametap.ui.components.GamepadCanvas
 import io.github.robbieadi.gametap.ui.components.OverlayDialog
 import io.github.robbieadi.gametap.ui.components.consumeTouchDowns
@@ -81,6 +91,9 @@ import io.github.robbieadi.gametap.ui.components.scrollIndicator
 import io.github.robbieadi.gametap.ui.theme.GamepadColors
 import io.github.robbieadi.gametap.viewmodel.EditorViewModel
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /** Height of the band the toolbar occupies, used to move it out of the selected control's way. */
 private val TOOLBAR_BAND = 72.dp
@@ -108,6 +121,9 @@ fun EditorScreen(viewModel: EditorViewModel, onClose: () -> Unit) {
         var preferBottom by rememberSaveable { mutableStateOf(false) }
         var renaming by remember { mutableStateOf(false) }
         var confirmDiscard by remember { mutableStateOf(false) }
+        var showGyro by rememberSaveable { mutableStateOf(false) }
+        // Selecting a control swaps the gyro panel for the control's own.
+        LaunchedEffect(state.selectedId) { if (state.selectedId != null) showGyro = false }
 
         fun close() {
             if (viewModel.hasUnsavedChanges()) confirmDiscard = true else onClose()
@@ -119,6 +135,7 @@ fun EditorScreen(viewModel: EditorViewModel, onClose: () -> Unit) {
                 when {
                     renaming -> renaming = false
                     confirmDiscard -> confirmDiscard = false
+                    showGyro -> showGyro = false
                     else -> close()
                 }
             },
@@ -168,6 +185,10 @@ fun EditorScreen(viewModel: EditorViewModel, onClose: () -> Unit) {
                 onClose = ::close,
                 onRename = { renaming = true },
                 onFlip = { preferBottom = !atBottom },
+                onGyro = {
+                    editor.select(null)
+                    showGyro = !showGyro
+                },
                 onSave = { scope.launch { if (viewModel.save()) onClose() } },
                 modifier = Modifier.align(if (atBottom) Alignment.BottomCenter else Alignment.TopCenter),
             )
@@ -182,6 +203,19 @@ fun EditorScreen(viewModel: EditorViewModel, onClose: () -> Unit) {
                         .align(if (onRight) Alignment.CenterEnd else Alignment.CenterStart)
                         .padding(8.dp)
                         .width(260.dp)
+                        .heightIn(max = maxHeight - 16.dp),
+                )
+            }
+            if (showGyro && state.selected == null) {
+                GyroPanel(
+                    setup = state.draft.gyro,
+                    available = viewModel.gyroAvailable,
+                    measuresTurning = viewModel.gyroMeasuresTurning,
+                    editor = editor,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(8.dp)
+                        .width(280.dp)
                         .heightIn(max = maxHeight - 16.dp),
                 )
             }
@@ -264,6 +298,7 @@ private fun Toolbar(
     onClose: () -> Unit,
     onRename: () -> Unit,
     onFlip: () -> Unit,
+    onGyro: () -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -284,7 +319,14 @@ private fun Toolbar(
         TextButton(onClick = editor::redo, enabled = state.canRedo) { Text("↷", fontSize = 22.sp) }
         if (state.issues.isNotEmpty()) {
             val onlyName = state.issues.all { it is LayoutIssue.BlankName || it is LayoutIssue.DuplicateName }
-            TextButton(onClick = if (onlyName) onRename else editor::selectNextIssue) {
+            val onlyGyro = state.issues.controlIds().isEmpty() && state.issues.any { it.isGyro }
+            TextButton(
+                onClick = when {
+                    onlyName -> onRename
+                    onlyGyro -> onGyro
+                    else -> editor::selectNextIssue
+                },
+            ) {
                 Text("⚠ ${state.issues.size}", color = GamepadColors.Warning)
             }
         }
@@ -310,6 +352,7 @@ private fun Toolbar(
                 }
             }
         }
+        TextButton(onClick = onGyro) { Text("Gyro") }
         TextButton(onClick = onFlip) { Text("⇅") }
         Button(onClick = onSave, enabled = state.issues.isEmpty(), modifier = Modifier.padding(start = 4.dp)) {
             Text("Save")
@@ -332,7 +375,14 @@ private fun ControlPanel(control: GamepadControl, state: EditorState, editor: La
         Text(control.kindName(), style = MaterialTheme.typography.titleSmall, color = GamepadColors.Label)
 
         if (control is GamepadControl.ButtonControl) {
-            Field("Sends") { ActionPicker(control.action, editor::setAction) }
+            Field("Sends") {
+                // Gyro on/off and Gyro on while held exclude each other, so offer only the kind in use.
+                val usedSwitches = state.draft.controls
+                    .filter { it.id != control.id }
+                    .mapNotNullTo(HashSet()) { (it as? GamepadControl.ButtonControl)?.action?.takeIf { a -> a in GYRO_SWITCHES } }
+                val blocked = if (usedSwitches.isEmpty()) emptySet() else GYRO_SWITCHES - usedSwitches
+                ActionPicker(control.action, blocked, editor::setAction)
+            }
         }
         val label = when (control) {
             is GamepadControl.ButtonControl -> control.label
@@ -417,16 +467,22 @@ private fun Segmented(options: List<String>, selected: Int, enabled: (Int) -> Bo
 private val ALL_ACTIONS: List<ButtonAction> =
     PadButton.entries.map { ButtonAction.Pad(it) } +
         DpadDirection.entries.map { ButtonAction.Dpad(it) } +
-        Side.entries.map { ButtonAction.Trigger(it) }
+        Side.entries.map { ButtonAction.Trigger(it) } +
+        GyroButton.entries.map { ButtonAction.Gyro(it) }
 
 private fun ButtonAction.displayName(): String = when (this) {
     is ButtonAction.Pad -> LayoutEditor.defaultLabel(this)
     is ButtonAction.Dpad -> "D-pad ${LayoutEditor.defaultLabel(this)}"
     is ButtonAction.Trigger -> "${LayoutEditor.defaultLabel(this)} (full pull)"
+    is ButtonAction.Gyro -> when (action) {
+        GyroButton.HOLD -> "Gyro on while held"
+        GyroButton.TOGGLE -> "Gyro on/off"
+        GyroButton.RECENTER -> "Recenter gyro"
+    }
 }
 
 @Composable
-private fun ActionPicker(action: ButtonAction, onPick: (ButtonAction) -> Unit) {
+private fun ActionPicker(action: ButtonAction, blocked: Set<ButtonAction>, onPick: (ButtonAction) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) { Text("${action.displayName()} ▾") }
@@ -438,6 +494,7 @@ private fun ActionPicker(action: ButtonAction, onPick: (ButtonAction) -> Unit) {
                         open = false
                         onPick(option)
                     },
+                    enabled = option !in blocked,
                 )
             }
         }
@@ -451,3 +508,156 @@ private fun GamepadControl.kindName(): String = when (this) {
     is GamepadControl.ThrottleControl -> "Analog trigger"
     is GamepadControl.DpadControl -> "D-pad"
 }
+
+/** Which outputs tilting the phone drives, for the whole profile. */
+@Composable
+private fun GyroPanel(
+    setup: GyroSetup,
+    available: Boolean,
+    measuresTurning: Boolean,
+    editor: LayoutEditor,
+    modifier: Modifier = Modifier,
+) {
+    val scroll = rememberScrollState()
+    Column(
+        modifier
+            .consumeTouchDowns()
+            .background(GamepadColors.Surface, RoundedCornerShape(16.dp))
+            .scrollIndicator(scroll, GamepadColors.Label.copy(alpha = 0.4f))
+            .verticalScroll(scroll)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Gyro", style = MaterialTheme.typography.titleSmall, color = GamepadColors.Label)
+        if (!available) {
+            Text(
+                "This device has no motion sensor. The settings are kept with the layout for other phones.",
+                style = MaterialTheme.typography.bodySmall,
+                color = GamepadColors.Warning,
+            )
+        } else if (!measuresTurning) {
+            Text(
+                "This device has no gyroscope, so tilt comes from the accelerometer: a little slower " +
+                    "and shakier, and horizontal tilt is always steering.",
+                style = MaterialTheme.typography.bodySmall,
+                color = GamepadColors.Warning,
+            )
+        }
+        Text(
+            "Without a Gyro on/off or Gyro on while held button, gyro is always on. With one, it " +
+                "starts off; a layout can use one of the two, not both. Tilt is measured from the " +
+                "angle the phone has when gyro turns on.",
+            style = MaterialTheme.typography.bodySmall,
+            color = GamepadColors.Label.copy(alpha = 0.7f),
+        )
+        // Turning cannot be measured from the accelerometer alone, so the choice is hidden there,
+        // unless a layout from another phone already uses it and needs switching back.
+        if (measuresTurning || !available || setup.horizontal == GyroHorizontal.YAW) {
+            Field("Horizontal is") {
+                Segmented(listOf("Steering", "Turning"), setup.horizontal.ordinal) {
+                    editor.setGyroHorizontal(GyroHorizontal.entries[it])
+                }
+            }
+        }
+        Field("Deadzone") {
+            Stepper(setup.deadzone, step = 0.5f, bounds = 0f..GyroSetup.MAX_DEADZONE, onChange = editor::setGyroDeadzone)
+        }
+        GyroTarget.entries.forEach { target -> GyroTargetEditor(target, setup.binding(target), editor) }
+    }
+}
+
+@Composable
+private fun GyroTargetEditor(target: GyroTarget, binding: GyroBinding?, editor: LayoutEditor) {
+    val side = if (target == GyroTarget.LEFT_STICK || target == GyroTarget.LEFT_TRIGGER) Side.LEFT else Side.RIGHT
+    val range = binding?.range ?: GyroBinding.DEFAULT_RANGE
+    when (target) {
+        GyroTarget.LEFT_STICK, GyroTarget.RIGHT_STICK -> {
+            val stick = binding as? GyroBinding.StickBinding
+            val selected = when {
+                stick == null -> 0
+                stick.horizontal && stick.vertical -> 3
+                stick.vertical -> 2
+                else -> 1
+            }
+            Field(if (side == Side.LEFT) "Left stick" else "Right stick") {
+                Segmented(listOf("Off", "↔", "↕", "Both"), selected) { index ->
+                    editor.setGyroBinding(
+                        target,
+                        if (index == 0) {
+                            null
+                        } else {
+                            GyroBinding.StickBinding(
+                                side = side,
+                                horizontal = index == 1 || index == 3,
+                                vertical = index == 2 || index == 3,
+                                range = range,
+                                invertVertical = stick?.invertVertical ?: false,
+                            )
+                        },
+                    )
+                }
+            }
+            if (stick != null) {
+                RangeStepper(target, range, editor)
+                if (stick.vertical) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Invert vertical", color = GamepadColors.Label, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = stick.invertVertical,
+                            onCheckedChange = { editor.setGyroBinding(target, stick.copy(invertVertical = it)) },
+                        )
+                    }
+                }
+            }
+        }
+        GyroTarget.LEFT_TRIGGER, GyroTarget.RIGHT_TRIGGER -> {
+            val trigger = binding as? GyroBinding.TriggerBinding
+            Field(if (side == Side.LEFT) "LT" else "RT") {
+                Segmented(listOf("Off", "↔", "↕"), trigger?.axis?.let { it.ordinal + 1 } ?: 0) { index ->
+                    editor.setGyroBinding(
+                        target,
+                        if (index == 0) null else GyroBinding.TriggerBinding(side, GyroAxis.entries[index - 1], trigger?.invert ?: false, range),
+                    )
+                }
+            }
+            if (trigger != null) {
+                val directions = if (trigger.axis == GyroAxis.HORIZONTAL) listOf("Right", "Left") else listOf("Up", "Down")
+                Field("Pulls when tilted") {
+                    Segmented(directions, if (trigger.invert) 1 else 0) {
+                        editor.setGyroBinding(target, trigger.copy(invert = it == 1))
+                    }
+                }
+                RangeStepper(target, range, editor)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RangeStepper(target: GyroTarget, range: Float, editor: LayoutEditor) {
+    Field("Full at") {
+        Stepper(range, step = 5f, bounds = GyroBinding.MIN_RANGE..GyroBinding.MAX_RANGE) { editor.setGyroRange(target, it) }
+    }
+}
+
+/**
+ * − value + in degrees. Not a Slider: Material's Slider consumes the touch-down, so a swipe that
+ * starts on it neither moves it nor scrolls the panel, and these panels are mostly settings.
+ * Steps land on multiples of [step], so an odd stored value rounds to the grid on the first tap.
+ */
+@Composable
+private fun Stepper(value: Float, step: Float, bounds: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    val down = (ceil(value / step - 0.001f) - 1) * step
+    val up = (floor(value / step + 0.001f) + 1) * step
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { onChange(down.coerceIn(bounds)) }, enabled = value > bounds.start, modifier = Modifier.weight(1f)) {
+            Text("−")
+        }
+        Text(degrees(value), color = GamepadColors.Label, textAlign = TextAlign.Center, modifier = Modifier.width(64.dp))
+        OutlinedButton(onClick = { onChange(up.coerceIn(bounds)) }, enabled = value < bounds.endInclusive, modifier = Modifier.weight(1f)) {
+            Text("+")
+        }
+    }
+}
+
+private fun degrees(value: Float): String = "${(value * 10).roundToInt() / 10f}°"

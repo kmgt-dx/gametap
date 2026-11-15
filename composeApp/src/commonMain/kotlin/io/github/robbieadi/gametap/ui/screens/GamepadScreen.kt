@@ -62,6 +62,7 @@ fun GamepadScreen(
     val layout by viewModel.layout.collectAsState()
     val layouts by viewModel.layouts.collectAsState()
     val touchView = viewModel.tracker.view.collectAsState()
+    val gyroOn = viewModel.gyroOn.collectAsState()
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by rememberSaveable { mutableStateOf<String?>(null) }
@@ -140,7 +141,7 @@ fun GamepadScreen(
                 }
             },
     ) {
-        GamepadCanvas(layout, touchView, Modifier.fillMaxSize(), flagged)
+        GamepadCanvas(layout, touchView, Modifier.fillMaxSize(), flagged, gyroOn)
         Column(
             Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 16.dp, end = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -7,6 +7,11 @@ import io.github.robbieadi.gametap.layout.GamepadControl
 import io.github.robbieadi.gametap.layout.GamepadControl.ButtonControl
 import io.github.robbieadi.gametap.layout.GamepadControl.MenuControl
 import io.github.robbieadi.gametap.layout.GamepadControl.StickControl
+import io.github.robbieadi.gametap.layout.GyroAxis
+import io.github.robbieadi.gametap.layout.GyroBinding
+import io.github.robbieadi.gametap.layout.GyroButton
+import io.github.robbieadi.gametap.layout.GyroSetup
+import io.github.robbieadi.gametap.layout.GyroTarget
 import io.github.robbieadi.gametap.layout.LayoutIssue
 import io.github.robbieadi.gametap.layout.LayoutJson
 import io.github.robbieadi.gametap.layout.LayoutProfile
@@ -170,5 +175,64 @@ class LayoutValidationTest {
     fun defaultFitsSoNothingIsFlagged() {
         val default = io.github.robbieadi.gametap.layout.DefaultLayout.profile
         assertEquals(emptySet(), default.screenIssues(ScreenSize(2220f, 1000f)).controlIds())
+    }
+
+    private fun gyro(vararg bindings: GyroBinding, deadzone: Float = 1f) =
+        profile().copy(gyro = GyroSetup(bindings.toList(), deadzone = deadzone)).validate(screen)
+
+    @Test
+    fun gyroBindingsOnSeparateTargetsAreValid() {
+        assertEquals(
+            emptyList(),
+            gyro(
+                GyroBinding.StickBinding(Side.LEFT),
+                GyroBinding.StickBinding(Side.RIGHT, vertical = false),
+                GyroBinding.TriggerBinding(Side.LEFT, GyroAxis.HORIZONTAL),
+                GyroBinding.TriggerBinding(Side.RIGHT, GyroAxis.HORIZONTAL, invert = true),
+            ),
+        )
+    }
+
+    @Test
+    fun twoGyroBindingsOnOneTargetAreReported() {
+        assertEquals(
+            listOf(LayoutIssue.DuplicateGyroTarget(GyroTarget.RIGHT_TRIGGER)),
+            gyro(GyroBinding.TriggerBinding(Side.RIGHT, GyroAxis.HORIZONTAL), GyroBinding.TriggerBinding(Side.RIGHT, GyroAxis.VERTICAL)),
+        )
+    }
+
+    @Test
+    fun badGyroValuesAreReported() {
+        assertEquals(
+            listOf(LayoutIssue.InvalidGyroBinding(GyroTarget.LEFT_STICK)),
+            gyro(GyroBinding.StickBinding(Side.LEFT, horizontal = false, vertical = false)),
+        )
+        assertEquals(
+            listOf(LayoutIssue.InvalidGyroBinding(GyroTarget.LEFT_TRIGGER)),
+            gyro(GyroBinding.TriggerBinding(Side.LEFT, GyroAxis.VERTICAL, range = 2f)),
+        )
+        assertEquals(listOf(LayoutIssue.InvalidGyroDeadzone), gyro(deadzone = 10f))
+    }
+
+    private fun gyroButton(id: String, action: GyroButton, y: Float) =
+        ButtonControl(id, Position(Anchor.RIGHT, 0.2f, y), Shape.Circle(0.05f), ButtonAction.Gyro(action), "")
+
+    @Test
+    fun gyroToggleAndHoldTogetherAreReported() {
+        val issues = profile(
+            gyroButton("t", GyroButton.TOGGLE, 0.2f),
+            gyroButton("h", GyroButton.HOLD, 0.5f),
+            gyroButton("r", GyroButton.RECENTER, 0.8f),
+        ).validate(screen)
+        assertEquals(listOf(LayoutIssue.ConflictingGyroButtons(listOf("t", "h"))), issues)
+        assertEquals(setOf("t", "h"), issues.controlIds())
+    }
+
+    @Test
+    fun twoOfTheSameGyroSwitchAreValid() {
+        assertEquals(
+            emptyList(),
+            profile(gyroButton("t1", GyroButton.TOGGLE, 0.2f), gyroButton("t2", GyroButton.TOGGLE, 0.5f)).validate(screen),
+        )
     }
 }
