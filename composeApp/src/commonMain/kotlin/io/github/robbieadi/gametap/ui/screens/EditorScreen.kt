@@ -76,7 +76,8 @@ import io.github.robbieadi.gametap.layout.centerX
 import io.github.robbieadi.gametap.layout.controlIds
 import io.github.robbieadi.gametap.ui.components.GamepadCanvas
 import io.github.robbieadi.gametap.ui.components.OverlayDialog
-import io.github.robbieadi.gametap.ui.components.consumeAllTouches
+import io.github.robbieadi.gametap.ui.components.consumeTouchDowns
+import io.github.robbieadi.gametap.ui.components.scrollIndicator
 import io.github.robbieadi.gametap.ui.theme.GamepadColors
 import io.github.robbieadi.gametap.viewmodel.EditorViewModel
 import kotlinx.coroutines.launch
@@ -270,7 +271,7 @@ private fun Toolbar(
     Row(
         modifier
             .padding(8.dp)
-            .consumeAllTouches()
+            .consumeTouchDowns()
             .background(GamepadColors.Surface, RoundedCornerShape(50))
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -318,11 +319,13 @@ private fun Toolbar(
 
 @Composable
 private fun ControlPanel(control: GamepadControl, state: EditorState, editor: LayoutEditor, modifier: Modifier = Modifier) {
+    val scroll = rememberScrollState()
     Column(
         modifier
-            .consumeAllTouches()
+            .consumeTouchDowns()
             .background(GamepadColors.Surface, RoundedCornerShape(16.dp))
-            .verticalScroll(rememberScrollState())
+            .scrollIndicator(scroll, GamepadColors.Label.copy(alpha = 0.4f))
+            .verticalScroll(scroll)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

@@ -24,7 +24,7 @@ import io.github.robbieadi.gametap.ui.theme.GamepadColors
 fun FitBanner(onEdit: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .consumeAllTouches()
+            .consumeTouchDowns()
             .background(GamepadColors.Surface, RoundedCornerShape(50))
             .padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,

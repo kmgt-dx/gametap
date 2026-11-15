@@ -60,7 +60,7 @@ fun GamepadMenu(
     Box(
         modifier
             .fillMaxSize()
-            .consumeAllTouches()
+            .consumeTouchDowns()
             .background(GamepadColors.Background.copy(alpha = 0.8f))
             .clickable(interactionSource = null, indication = null, onClickLabel = "Resume", onClick = onResume),
         contentAlignment = Alignment.Center,
