@@ -14,7 +14,7 @@ encoding, input handling and UI are all shared; platform code only moves bytes o
 | Android app with a Linux host | Used on a Redmi Pad SE; every control tested one at a time |
 | Multi-touch | Unit tested in the tracker; used in a game on the Redmi Pad SE, not checked control by control |
 | Leaving the app and coming back | Tested on the Redmi Pad SE, see [Using it](#using-it) |
-| Gyro | Tilt math and controls unit tested; **not yet tried on a device**, with or without a gyroscope. Android only |
+| Gyro | Tilt math and controls unit tested. iOS reader checked against CoreMotion's gravity on an iPhone 13 mini; **tilting not yet tried on a device** on either platform |
 | Windows and macOS hosts | **Not yet tested** |
 | iOS code | Compiles against the iOS SDK bindings; **never linked or run** |
 | iOS as a gamepad | **Unproven, see below** |
@@ -74,8 +74,10 @@ The sensor is Android's game rotation vector (gyroscope and accelerometer, no co
 gyroscope, such as many budget tablets, fall back to the accelerometer alone. It measures
 steering and forward/back tilt from the direction of gravity, smoothed over about 20 ms to hide
 the phone's own movement, and cannot measure turning. The editor says when this applies. While gyro is active
-the input keeps changing, so reports go out at the 8 ms cap instead of the 16 ms keep-alive. iOS
-has no sensor reader yet.
+the input keeps changing, so reports go out at the 8 ms cap instead of the 16 ms keep-alive.
+
+On iOS the sensor is CoreMotion's device motion, also gyroscope and accelerometer without the
+compass, at 100 Hz. Every device iOS 16 runs on has a gyroscope, so there is no fallback.
 
 To check the result on a host, use Windows `joy.cpl`, <https://hardwaretester.com/gamepad>,
 Steam controller settings, or `evtest` / `jstest` on Linux.
