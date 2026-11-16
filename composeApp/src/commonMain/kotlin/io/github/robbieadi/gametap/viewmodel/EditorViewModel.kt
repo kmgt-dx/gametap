@@ -7,6 +7,7 @@ import io.github.robbieadi.gametap.layout.LayoutEditor
 import io.github.robbieadi.gametap.layout.LayoutProfile
 import io.github.robbieadi.gametap.layout.LayoutRepository
 import io.github.robbieadi.gametap.layout.ScreenSize
+import io.github.robbieadi.gametap.platform.MotionSensor
 import io.github.robbieadi.gametap.platform.ScreenModeLock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -19,7 +20,14 @@ class EditorViewModel(
     profileId: String,
     private val repository: LayoutRepository,
     private val screenMode: ScreenModeLock,
+    motionSensor: MotionSensor,
 ) : ViewModel() {
+    /** False on devices without a motion sensor; gyro bindings can still be edited for other phones. */
+    val gyroAvailable: Boolean = motionSensor.isAvailable
+
+    /** False without a gyroscope, when tilt comes from the accelerometer and turning reads 0. */
+    val gyroMeasuresTurning: Boolean = motionSensor.measuresTurning
+
     private val source: LayoutProfile
     private val isNewCopy: Boolean
 

@@ -4,7 +4,12 @@ import androidx.datastore.core.CorruptionException
 import io.github.robbieadi.gametap.layout.Anchor
 import io.github.robbieadi.gametap.layout.DefaultLayout
 import io.github.robbieadi.gametap.layout.GamepadControl.MenuControl
+import io.github.robbieadi.gametap.layout.GyroAxis
+import io.github.robbieadi.gametap.layout.GyroBinding
+import io.github.robbieadi.gametap.layout.GyroHorizontal
+import io.github.robbieadi.gametap.layout.GyroSetup
 import io.github.robbieadi.gametap.layout.LayoutProfile
+import io.github.robbieadi.gametap.layout.Side
 import io.github.robbieadi.gametap.layout.LayoutStore
 import io.github.robbieadi.gametap.layout.LayoutStoreSerializer
 import io.github.robbieadi.gametap.layout.Position
@@ -55,5 +60,36 @@ class LayoutFileTest {
         assertFailsWith<CorruptionException> { read("not json") }
         assertFailsWith<CorruptionException> { read("") }
         assertFailsWith<CorruptionException> { read("[1, 2]") }
+    }
+
+    @Test
+    fun gyroSetupReadsBack() = runTest {
+        val gyro = GyroSetup(
+            bindings = listOf(
+                GyroBinding.StickBinding(Side.RIGHT, horizontal = true, vertical = false, range = 40f, invertVertical = true),
+                GyroBinding.TriggerBinding(Side.LEFT, GyroAxis.VERTICAL, invert = true, range = 20f),
+            ),
+            horizontal = GyroHorizontal.YAW,
+            deadzone = 2f,
+        )
+        val store = LayoutStore(activeProfileId = racing.id, profiles = listOf(racing.copy(gyro = gyro)))
+        val buffer = Buffer()
+        LayoutStoreSerializer.writeTo(store, buffer)
+        assertEquals(store, LayoutStoreSerializer.readFrom(buffer))
+    }
+
+    /** Written before gyro existed. */
+    @Test
+    fun profileWithoutGyroReadsWithNoBindings() = runTest {
+        val store = read(
+            """
+            {"version":1,"activeProfileId":"racing","profiles":[
+              {"id":"racing","name":"Racing","controls":[
+                {"type":"menu","id":"menu","position":{"anchor":"left","x":0.1,"y":0.1},
+                 "shape":{"type":"circle","r":0.05},"label":"☰"}]}
+            ]}
+            """.trimIndent(),
+        )
+        assertEquals(GyroSetup(), store.profiles.single().gyro)
     }
 }

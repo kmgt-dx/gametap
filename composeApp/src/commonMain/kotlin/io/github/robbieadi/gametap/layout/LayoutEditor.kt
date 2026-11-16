@@ -227,6 +227,45 @@ class LayoutEditor(
 
     fun rename(name: String) = edit(key = "name") { it.copy(name = name) }
 
+    // ---------- Gyro ----------
+
+    fun setGyroHorizontal(horizontal: GyroHorizontal) = editGyro { it.copy(horizontal = horizontal) }
+
+    /** Consecutive steps share one undo step. */
+    fun setGyroDeadzone(degrees: Float) = editGyro(key = "gyro:deadzone") {
+        it.copy(deadzone = degrees.coerceIn(0f, GyroSetup.MAX_DEADZONE))
+    }
+
+    /** Replaces whatever drives [target]. Null removes it. */
+    fun setGyroBinding(target: GyroTarget, binding: GyroBinding?) {
+        require(binding == null || binding.target == target) { "Binding for ${binding?.target} given as $target" }
+        editGyro { setup ->
+            val others = setup.bindings.filterNot { it.target == target }
+            // Kept in target order, so the file does not depend on the order of edits.
+            setup.copy(bindings = (others + listOfNotNull(binding)).sortedBy { it.target.ordinal })
+        }
+    }
+
+    /** Consecutive steps share one undo step per target. */
+    fun setGyroRange(target: GyroTarget, degrees: Float) {
+        val range = degrees.coerceIn(GyroBinding.MIN_RANGE, GyroBinding.MAX_RANGE)
+        editGyro(key = "gyro:range:$target") { setup ->
+            setup.copy(
+                bindings = setup.bindings.map { binding ->
+                    when {
+                        binding.target != target -> binding
+                        binding is GyroBinding.StickBinding -> binding.copy(range = range)
+                        binding is GyroBinding.TriggerBinding -> binding.copy(range = range)
+                        else -> binding
+                    }
+                },
+            )
+        }
+    }
+
+    private fun editGyro(key: String? = null, transform: (GyroSetup) -> GyroSetup) =
+        edit(key) { it.copy(gyro = transform(it.gyro)) }
+
     // ---------- Adding and removing ----------
 
     fun add(kind: NewControl) {
@@ -474,6 +513,11 @@ class LayoutEditor(
                 DpadDirection.RIGHT -> "→"
             }
             is ButtonAction.Trigger -> triggerLabel(action.side)
+            is ButtonAction.Gyro -> when (action.action) {
+                GyroButton.HOLD -> "Gyro"
+                GyroButton.TOGGLE -> "Gyro I/O"
+                GyroButton.RECENTER -> "Center"
+            }
         }
 
         private fun triggerLabel(side: Side) = if (side == Side.LEFT) "LT" else "RT"

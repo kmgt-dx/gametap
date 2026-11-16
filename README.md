@@ -14,6 +14,7 @@ encoding, input handling and UI are all shared; platform code only moves bytes o
 | Android app with a Linux host | Used on a Redmi Pad SE; every control tested one at a time |
 | Multi-touch | Unit tested in the tracker; used in a game on the Redmi Pad SE, not checked control by control |
 | Leaving the app and coming back | Tested on the Redmi Pad SE, see [Using it](#using-it) |
+| Gyro | Tilt math and controls unit tested. iOS reader checked against CoreMotion's gravity on an iPhone 13 mini; **tilting not yet tried on a device** on either platform |
 | Windows and macOS hosts | **Not yet tested** |
 | iOS code | Compiles against the iOS SDK bindings; **never linked or run** |
 | iOS as a gamepad | **Unproven, see below** |
@@ -52,6 +53,31 @@ longer visible. Coming back reconnects by itself, in about a second, unless you 
 Any control held when you leave is released first.
 
 Hold the three dots in the top-left corner of the gamepad to open settings.
+
+### Gyro
+
+Tap **Gyro** in the layout editor to drive outputs by tilting the phone. Each stick takes the
+horizontal tilt, the vertical tilt or both; each trigger takes one direction of one axis, such as
+"pulls when tilted right". One tilt can drive several outputs. Horizontal is either steering
+(turning the phone like a wheel) or turning (around its vertical axis), set per layout.
+
+Tilt is measured from the angle the phone has when gyro turns on. Three button actions control
+it: **Gyro on/off**, which starts off with each layout, **Gyro on while held**, and **Recenter
+gyro**. A layout can use one of the first two, not both. With neither, gyro is on whenever the
+gamepad is open.
+
+Gyro adds to the touch stick, after the stick's response curve, and a gyro trigger and a touch
+trigger take the higher value.
+
+The sensor is Android's game rotation vector (gyroscope and accelerometer, no compass), read at
+200 Hz only while the gamepad is on screen and the layout has gyro bindings. Devices without a
+gyroscope, such as many budget tablets, fall back to the accelerometer alone. It measures
+steering and forward/back tilt from the direction of gravity, smoothed over about 20 ms to hide
+the phone's own movement, and cannot measure turning. The editor says when this applies. While gyro is active
+the input keeps changing, so reports go out at the 8 ms cap instead of the 16 ms keep-alive.
+
+On iOS the sensor is CoreMotion's device motion, also gyroscope and accelerometer without the
+compass, at 100 Hz. Every device iOS 16 runs on has a gyroscope, so there is no fallback.
 
 To check the result on a host, use Windows `joy.cpl`, <https://hardwaretester.com/gamepad>,
 Steam controller settings, or `evtest` / `jstest` on Linux.

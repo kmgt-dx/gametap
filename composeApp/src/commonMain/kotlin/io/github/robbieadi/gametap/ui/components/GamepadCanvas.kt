@@ -23,7 +23,9 @@ import io.github.robbieadi.gametap.domain.Dpad
 import io.github.robbieadi.gametap.input.StickView
 import io.github.robbieadi.gametap.input.TouchView
 import io.github.robbieadi.gametap.layout.Area
+import io.github.robbieadi.gametap.layout.ButtonAction
 import io.github.robbieadi.gametap.layout.GamepadControl
+import io.github.robbieadi.gametap.layout.GyroButton
 import io.github.robbieadi.gametap.layout.LayoutProfile
 import io.github.robbieadi.gametap.layout.ScreenSize
 import io.github.robbieadi.gametap.layout.area
@@ -37,6 +39,9 @@ import io.github.robbieadi.gametap.ui.theme.GamepadColors
  * Controls in [flagged] get a warning outline around their touch area, drawn above everything, so
  * an overlap shows even where one control hides the other. For a stick this is the grab area,
  * which is what overlaps.
+ *
+ * Gyro on/off buttons get an accent ring while [gyroOn] is true. The editor passes null, as gyro
+ * does not run there.
  */
 @Composable
 fun GamepadCanvas(
@@ -44,6 +49,7 @@ fun GamepadCanvas(
     view: State<TouchView>,
     modifier: Modifier = Modifier,
     flagged: Set<String> = emptySet(),
+    gyroOn: State<Boolean>? = null,
 ) {
     val measurer = rememberTextMeasurer()
     val labelStyle = remember {
@@ -51,12 +57,15 @@ fun GamepadCanvas(
     }
     Canvas(modifier) {
         val current = view.value
+        val lit = gyroOn?.value == true
         val screen = ScreenSize(size.width, size.height)
         layout.controls.forEach { control ->
             val area = control.area(screen)
             when (control) {
-                is GamepadControl.ButtonControl ->
+                is GamepadControl.ButtonControl -> {
                     drawButton(area, control.label, current.isPressed(control), measurer, labelStyle)
+                    if (lit && control.action == ButtonAction.Gyro(GyroButton.TOGGLE)) drawRing(area)
+                }
                 is GamepadControl.MenuControl ->
                     drawButton(area, control.label, current.isPressed(control), measurer, labelStyle)
                 is GamepadControl.StickControl ->
@@ -113,6 +122,19 @@ private fun DrawScope.drawButton(
         }
     }
     drawLabel(label, center, measurer, style)
+}
+
+/** Marks a latched button, inside its edge so it stays within the touch area. */
+private fun DrawScope.drawRing(area: Area) {
+    val width = 3.dp.toPx()
+    val stroke = Stroke(width)
+    when (area) {
+        is Area.Circle -> drawCircle(GamepadColors.Accent, area.r - width / 2f, Offset(area.cx, area.cy), style = stroke)
+        is Area.Rect -> {
+            val rect = area.toRect().deflate(width / 2f)
+            drawRoundRect(GamepadColors.Accent, rect.topLeft, rect.size, CornerRadius(minOf(rect.width, rect.height) / 3f), style = stroke)
+        }
+    }
 }
 
 /** The base sits at the touch-down point when floating, else at the control's center. */

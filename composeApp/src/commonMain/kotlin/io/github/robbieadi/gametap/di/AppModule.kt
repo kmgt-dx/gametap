@@ -19,8 +19,8 @@ import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 /**
- * Provides HidTransport, Haptics, ScreenControl, BluetoothAccess, the settings DataStore and,
- * under [LayoutStoreQualifier], the layout DataStore.
+ * Provides HidTransport, Haptics, ScreenControl, BluetoothAccess, MotionSensor, the settings
+ * DataStore and, under [LayoutStoreQualifier], the layout DataStore.
  */
 expect fun platformModule(): Module
 
@@ -34,5 +34,5 @@ val commonModule: Module = module {
     viewModelOf(::ConnectionViewModel)
     viewModelOf(::GamepadViewModel)
     viewModelOf(::SettingsViewModel)
-    viewModel { params -> EditorViewModel(params.get(), get(), get()) }
+    viewModel { params -> EditorViewModel(params.get(), get(), get(), get()) }
 }

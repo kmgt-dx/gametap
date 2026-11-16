@@ -15,7 +15,9 @@ import io.github.robbieadi.gametap.platform.HidTransport
 import io.github.robbieadi.gametap.platform.IosBluetoothAccess
 import io.github.robbieadi.gametap.platform.IosHaptics
 import io.github.robbieadi.gametap.platform.IosHogpTransport
+import io.github.robbieadi.gametap.platform.IosMotionSensor
 import io.github.robbieadi.gametap.platform.IosScreenControl
+import io.github.robbieadi.gametap.platform.MotionSensor
 import io.github.robbieadi.gametap.platform.SETTINGS_FILE_NAME
 import io.github.robbieadi.gametap.platform.ScreenControl
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -28,26 +30,29 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
-actual fun platformModule(): Module = module {
-    single<HidTransport> { IosHogpTransport() }
-    single<BluetoothAccess> { IosBluetoothAccess() }
-    single<Haptics> { IosHaptics() }
-    single<ScreenControl> { IosScreenControl() }
-    single<DataStore<Preferences>> {
-        PreferenceDataStoreFactory.createWithPath { documentsFile(SETTINGS_FILE_NAME) }
+actual fun platformModule(): Module =
+    module {
+        single<HidTransport> { IosHogpTransport() }
+        single<BluetoothAccess> { IosBluetoothAccess() }
+        single<Haptics> { IosHaptics() }
+        single<ScreenControl> { IosScreenControl() }
+        single<MotionSensor> { IosMotionSensor() }
+        single<DataStore<Preferences>> {
+            PreferenceDataStoreFactory.createWithPath { documentsFile(SETTINGS_FILE_NAME) }
+        }
+        single<DataStore<LayoutStore>>(LayoutStoreQualifier) {
+            layoutDataStore(FileSystem.SYSTEM) { documentsFile(LAYOUT_FILE_NAME) }
+        }
     }
-    single<DataStore<LayoutStore>>(LayoutStoreQualifier) {
-        layoutDataStore(FileSystem.SYSTEM) { documentsFile(LAYOUT_FILE_NAME) }
-    }
-}
 
 private fun documentsFile(name: String): Path {
-    val documents = NSFileManager.defaultManager.URLForDirectory(
-        directory = NSDocumentDirectory,
-        inDomain = NSUserDomainMask,
-        appropriateForURL = null,
-        create = true,
-        error = null,
-    )
+    val documents =
+        NSFileManager.defaultManager.URLForDirectory(
+            directory = NSDocumentDirectory,
+            inDomain = NSUserDomainMask,
+            appropriateForURL = null,
+            create = true,
+            error = null,
+        )
     return "${requireNotNull(documents?.path)}/$name".toPath()
 }

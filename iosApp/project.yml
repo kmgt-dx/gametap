@@ -10,13 +10,12 @@ targets:
     platform: iOS
     sources:
       - iosApp
-    info:
-      path: iosApp/Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.robbieadi.gametap
         PRODUCT_NAME: Gametap
         GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: iosApp/Info.plist
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         FRAMEWORK_SEARCH_PATHS: $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
         OTHER_LDFLAGS: $(inherited) -framework ComposeApp

@@ -9,6 +9,10 @@ import io.github.robbieadi.gametap.layout.GamepadControl.ButtonControl
 import io.github.robbieadi.gametap.layout.GamepadControl.MenuControl
 import io.github.robbieadi.gametap.layout.GamepadControl.StickControl
 import io.github.robbieadi.gametap.layout.Guide
+import io.github.robbieadi.gametap.layout.GyroAxis
+import io.github.robbieadi.gametap.layout.GyroBinding
+import io.github.robbieadi.gametap.layout.GyroHorizontal
+import io.github.robbieadi.gametap.layout.GyroTarget
 import io.github.robbieadi.gametap.layout.LayoutEditor
 import io.github.robbieadi.gametap.layout.LayoutIssue
 import io.github.robbieadi.gametap.layout.LayoutProfile
@@ -248,5 +252,43 @@ class LayoutEditorTest {
         val editor = editor(menu, a, otherNames = setOf("Racing"))
         editor.rename("Racing")
         assertEquals(listOf(LayoutIssue.DuplicateName), editor.s.issues)
+    }
+
+    @Test
+    fun gyroBindingsAreSetReplacedRemovedAndUndone() {
+        val editor = editor(menu)
+        editor.setGyroBinding(GyroTarget.RIGHT_TRIGGER, GyroBinding.TriggerBinding(Side.RIGHT, GyroAxis.HORIZONTAL))
+        editor.setGyroBinding(GyroTarget.LEFT_STICK, GyroBinding.StickBinding(Side.LEFT))
+        assertEquals(listOf(GyroTarget.LEFT_STICK, GyroTarget.RIGHT_TRIGGER), editor.s.draft.gyro.bindings.map { it.target })
+
+        editor.setGyroBinding(GyroTarget.LEFT_STICK, GyroBinding.StickBinding(Side.LEFT, vertical = false))
+        assertEquals(GyroBinding.StickBinding(Side.LEFT, vertical = false), editor.s.draft.gyro.binding(GyroTarget.LEFT_STICK))
+
+        editor.setGyroBinding(GyroTarget.RIGHT_TRIGGER, null)
+        assertEquals(listOf(GyroTarget.LEFT_STICK), editor.s.draft.gyro.bindings.map { it.target })
+
+        editor.undo()
+        assertEquals(2, editor.s.draft.gyro.bindings.size)
+    }
+
+    @Test
+    fun gyroRangeDragIsOneUndoStepAndStaysInBounds() {
+        val editor = editor(menu)
+        editor.setGyroBinding(GyroTarget.LEFT_STICK, GyroBinding.StickBinding(Side.LEFT))
+        editor.setGyroRange(GyroTarget.LEFT_STICK, 40f)
+        editor.setGyroRange(GyroTarget.LEFT_STICK, 500f)
+        assertEquals(GyroBinding.MAX_RANGE, editor.s.draft.gyro.bindings.single().range)
+        editor.undo()
+        assertEquals(GyroBinding.DEFAULT_RANGE, editor.s.draft.gyro.bindings.single().range)
+    }
+
+    @Test
+    fun gyroSettingsAreEdited() {
+        val editor = editor(menu)
+        editor.setGyroHorizontal(GyroHorizontal.YAW)
+        editor.setGyroDeadzone(2.5f)
+        assertEquals(GyroHorizontal.YAW, editor.s.draft.gyro.horizontal)
+        assertEquals(2.5f, editor.s.draft.gyro.deadzone)
+        assertTrue(editor.s.issues.isEmpty())
     }
 }

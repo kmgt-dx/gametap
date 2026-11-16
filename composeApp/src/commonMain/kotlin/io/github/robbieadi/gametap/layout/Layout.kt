@@ -65,6 +65,109 @@ sealed interface ButtonAction {
     @Serializable
     @SerialName("trigger")
     data class Trigger(val side: Side) : ButtonAction
+
+    /** Controls gyro aiming. Sends nothing to the host itself. */
+    @Serializable
+    @SerialName("gyro")
+    data class Gyro(val action: GyroButton) : ButtonAction
+}
+
+@Serializable
+enum class GyroButton {
+    /** Gyro works while this is held, and pressing it sets the neutral angle. */
+    @SerialName("hold") HOLD,
+
+    /**
+     * Turns gyro on and off. It starts off with each profile, and turning it on sets the neutral
+     * angle. A profile with a toggle or hold button has gyro off unless one of them turns it on.
+     */
+    @SerialName("toggle") TOGGLE,
+
+    /** The current angle becomes neutral. */
+    @SerialName("recenter") RECENTER,
+}
+
+/** Which way of moving the phone counts as horizontal tilt. */
+@Serializable
+enum class GyroHorizontal {
+    /** Turning the phone like a steering wheel. */
+    @SerialName("roll") ROLL,
+
+    /** Turning the phone left and right around its vertical axis. */
+    @SerialName("yaw") YAW,
+}
+
+@Serializable
+enum class GyroAxis {
+    /** Positive is to the right. */
+    @SerialName("horizontal") HORIZONTAL,
+
+    /**
+     * Positive is up: the top edge tipping toward the player, so the back of the phone points
+     * higher, like a camera looking up.
+     */
+    @SerialName("vertical") VERTICAL,
+}
+
+/** A gamepad input that gyro can drive. At most one binding per target. */
+enum class GyroTarget { LEFT_STICK, RIGHT_STICK, LEFT_TRIGGER, RIGHT_TRIGGER }
+
+/** One output driven by tilting the phone away from its neutral angle. */
+@Serializable
+sealed interface GyroBinding {
+    /** Degrees of tilt past the deadzone that give full output. */
+    val range: Float
+    val target: GyroTarget
+
+    /** A stick takes one or both axes. Tilting back (top edge toward the player) pushes it up. */
+    @Serializable
+    @SerialName("stick")
+    data class StickBinding(
+        val side: Side,
+        val horizontal: Boolean = true,
+        val vertical: Boolean = true,
+        override val range: Float = DEFAULT_RANGE,
+        val invertVertical: Boolean = false,
+    ) : GyroBinding {
+        override val target: GyroTarget get() = if (side == Side.LEFT) GyroTarget.LEFT_STICK else GyroTarget.RIGHT_STICK
+    }
+
+    /**
+     * A trigger takes one axis and pulls on one side of it: tilting right or up, or with
+     * [invert] left or down. Tilting the other way leaves it released.
+     */
+    @Serializable
+    @SerialName("trigger")
+    data class TriggerBinding(
+        val side: Side,
+        val axis: GyroAxis,
+        val invert: Boolean = false,
+        override val range: Float = DEFAULT_RANGE,
+    ) : GyroBinding {
+        override val target: GyroTarget get() = if (side == Side.LEFT) GyroTarget.LEFT_TRIGGER else GyroTarget.RIGHT_TRIGGER
+    }
+
+    companion object {
+        const val DEFAULT_RANGE: Float = 30f
+        const val MIN_RANGE: Float = 5f
+        const val MAX_RANGE: Float = 90f
+    }
+}
+
+@Serializable
+data class GyroSetup(
+    val bindings: List<GyroBinding> = emptyList(),
+    val horizontal: GyroHorizontal = GyroHorizontal.ROLL,
+    /** Degrees of tilt either side of neutral that send nothing, to hide hand tremor. */
+    val deadzone: Float = DEFAULT_DEADZONE,
+) {
+    fun binding(target: GyroTarget): GyroBinding? = bindings.firstOrNull { it.target == target }
+
+    companion object {
+        const val DEFAULT_DEADZONE: Float = 1f
+        /** Below [GyroBinding.MIN_RANGE], so every binding has some travel. */
+        const val MAX_DEADZONE: Float = 4f
+    }
 }
 
 /**
@@ -145,6 +248,8 @@ data class LayoutProfile(
     val id: String,
     val name: String,
     val controls: List<GamepadControl>,
+    /** Defaults to no bindings, so files written before gyro existed still read. */
+    val gyro: GyroSetup = GyroSetup(),
 )
 
 /** Everything the layout file holds. [version] lets a later format migrate older files. */

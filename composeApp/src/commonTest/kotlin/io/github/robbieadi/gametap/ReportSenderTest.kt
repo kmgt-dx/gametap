@@ -7,6 +7,7 @@ import io.github.robbieadi.gametap.domain.Button
 import io.github.robbieadi.gametap.domain.GamepadSettings
 import io.github.robbieadi.gametap.domain.GamepadState
 import io.github.robbieadi.gametap.domain.Stick
+import io.github.robbieadi.gametap.gyro.GyroOutput
 import io.github.robbieadi.gametap.input.InputStateHolder
 import io.github.robbieadi.gametap.input.ReportSender
 import io.github.robbieadi.gametap.platform.HidTransport
@@ -214,5 +215,33 @@ class ReportSenderTest {
             assertEquals(128, awaitItem()[3])
         }
         assertEquals(0.4f, input.state.value.leftStick.x)
+    }
+
+    @Test
+    fun gyroAddsToTheCurvedStickAndTriggersTakeTheHigherValue() = runTest {
+        val transport = FakeTransport()
+        transport.sent.test {
+            startSender(transport)
+            awaitItem()
+            input.set(GamepadState(leftStick = Stick(x = 0.8f), rightTrigger = 0.2f))
+            input.setMotion(GyroOutput(leftStick = Stick(0.5f, -0.5f), rightTrigger = 0.6f, leftTrigger = 0.4f))
+            advance(8)
+            val report = expectMostRecentItem()
+            assertEquals(255, report[3]) // 0.8 + 0.5, clamped
+            assertEquals(64, report[4]) // -0.5
+            assertEquals(102, report[7]) // gyro alone
+            assertEquals(153, report[8]) // max(0.2, 0.6)
+        }
+    }
+
+    @Test
+    fun gyroChangeAloneIsSent() = runTest {
+        val transport = FakeTransport()
+        startSender(transport)
+        advance(100)
+        val before = transport.attempts
+        input.setMotion(GyroOutput(rightStick = Stick(x = 0.5f)))
+        runCurrent()
+        assertEquals(before + 1, transport.attempts)
     }
 }

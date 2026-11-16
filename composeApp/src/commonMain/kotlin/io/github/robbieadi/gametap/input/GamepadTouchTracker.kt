@@ -12,6 +12,7 @@ import io.github.robbieadi.gametap.layout.GamepadControl.DpadControl
 import io.github.robbieadi.gametap.layout.GamepadControl.MenuControl
 import io.github.robbieadi.gametap.layout.GamepadControl.StickControl
 import io.github.robbieadi.gametap.layout.GamepadControl.ThrottleControl
+import io.github.robbieadi.gametap.layout.GyroButton
 import io.github.robbieadi.gametap.layout.LayoutProfile
 import io.github.robbieadi.gametap.layout.ScreenSize
 import io.github.robbieadi.gametap.layout.Side
@@ -61,6 +62,8 @@ class GamepadTouchTracker(
     private val input: InputStateHolder,
     private val floatingSticks: () -> Boolean = { false },
     private val onPress: () -> Unit = {},
+    /** The gyro buttons under a finger, after every change. */
+    private val onGyroButtons: (Set<GyroButton>) -> Unit = {},
 ) {
     private class Placed(val control: GamepadControl, val area: Area)
 
@@ -140,6 +143,7 @@ class GamepadTouchTracker(
         var leftStick = Stick.Center
         var rightStick = Stick.Center
         var triggerButtons = 0
+        val gyroButtons = HashSet<GyroButton>()
         val pressed = HashSet<String>()
         val dpads = HashMap<String, Dpad>()
         val throttles = HashMap<String, Float>()
@@ -167,6 +171,7 @@ class GamepadTouchTracker(
                                 pullTrigger(action.side, 1f)
                                 triggerButtons = triggerButtons or (1 shl action.side.ordinal)
                             }
+                            is ButtonAction.Gyro -> gyroButtons += action.action
                         }
                     }
                     is MenuControl -> {
@@ -202,12 +207,15 @@ class GamepadTouchTracker(
         }
 
         // Every digital input in one mask, so a newly pressed one of any kind gives one buzz.
-        val digital = buttons.toLong() or (dpad.bits().toLong() shl 32) or (triggerButtons.toLong() shl 40)
+        val gyroBits = gyroButtons.fold(0) { bits, button -> bits or (1 shl button.ordinal) }
+        val digital = buttons.toLong() or (dpad.bits().toLong() shl 32) or (triggerButtons.toLong() shl 40) or
+            (gyroBits.toLong() shl 44)
         if (digital and lastDigital.inv() != 0L) onPress()
         lastDigital = digital
 
         mutableView.value = TouchView(pressed, dpads, throttles, sticks, menuHeld)
         input.set(GamepadState(buttons, dpad, leftStick, rightStick, leftTrigger, rightTrigger))
+        onGyroButtons(gyroButtons)
     }
 
     private fun stickValue(pointer: Pointer, origin: TouchPoint, radius: Float): Stick {

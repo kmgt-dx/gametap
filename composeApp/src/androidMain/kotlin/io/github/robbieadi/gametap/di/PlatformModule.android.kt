@@ -13,10 +13,12 @@ import io.github.robbieadi.gametap.platform.ActivityProvider
 import io.github.robbieadi.gametap.platform.AndroidBluetoothAccess
 import io.github.robbieadi.gametap.platform.AndroidHaptics
 import io.github.robbieadi.gametap.platform.AndroidHidTransport
+import io.github.robbieadi.gametap.platform.AndroidMotionSensor
 import io.github.robbieadi.gametap.platform.AndroidScreenControl
 import io.github.robbieadi.gametap.platform.BluetoothAccess
 import io.github.robbieadi.gametap.platform.Haptics
 import io.github.robbieadi.gametap.platform.HidTransport
+import io.github.robbieadi.gametap.platform.MotionSensor
 import io.github.robbieadi.gametap.platform.SETTINGS_FILE_NAME
 import io.github.robbieadi.gametap.platform.ScreenControl
 import okio.FileSystem
@@ -31,6 +33,7 @@ actual fun platformModule(): Module = module {
     single { AndroidBluetoothAccess(get()) } bind BluetoothAccess::class
     single<Haptics> { AndroidHaptics(get()) }
     single<ScreenControl> { AndroidScreenControl(get()) }
+    single<MotionSensor> { AndroidMotionSensor(get(), get()) }
     single<DataStore<Preferences>> {
         val context = get<Context>()
         PreferenceDataStoreFactory.create { context.preferencesDataStoreFile(SETTINGS_FILE_NAME.removeSuffix(".preferences_pb")) }

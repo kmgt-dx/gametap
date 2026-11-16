@@ -3,6 +3,7 @@ package io.github.robbieadi.gametap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.robbieadi.gametap.domain.GamepadSettings
+import io.github.robbieadi.gametap.gyro.GyroController
 import io.github.robbieadi.gametap.input.GamepadTouchTracker
 import io.github.robbieadi.gametap.input.InputStateHolder
 import io.github.robbieadi.gametap.input.ReportSender
@@ -10,10 +11,12 @@ import io.github.robbieadi.gametap.layout.LayoutProfile
 import io.github.robbieadi.gametap.layout.LayoutRepository
 import io.github.robbieadi.gametap.layout.Layouts
 import io.github.robbieadi.gametap.platform.Haptics
+import io.github.robbieadi.gametap.platform.MotionSensor
 import io.github.robbieadi.gametap.platform.ScreenModeLock
 import io.github.robbieadi.gametap.platform.SettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -26,21 +29,36 @@ class GamepadViewModel(
     private val haptics: Haptics,
     settingsRepository: SettingsRepository,
     private val layoutRepository: LayoutRepository,
+    private val motionSensor: MotionSensor,
 ) : ViewModel() {
     private val settings: StateFlow<GamepadSettings> = settingsRepository.settings
+
+    private val gyro = GyroController(input::setMotion)
+    private var shown = false
+    private var sensorRunning = false
 
     val tracker = GamepadTouchTracker(
         layout = layoutRepository.layouts.value.active,
         input = input,
         floatingSticks = { settings.value.floatingSticks },
         onPress = { if (settings.value.hapticsEnabled) haptics.tick() },
+        onGyroButtons = gyro::setButtons,
     )
 
     /** The profile in use. The tracker switches over before the screen draws the new one. */
     val layout: StateFlow<LayoutProfile> = layoutRepository.layouts
         .map { it.active }
-        .onEach { tracker.setLayout(it) }
+        .onEach {
+            tracker.setLayout(it)
+            gyro.setLayout(it)
+            updateSensor(it)
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, layoutRepository.layouts.value.active)
+
+    /** A toggle button has turned gyro on and it can run, which shows the button lit. */
+    val gyroOn: StateFlow<Boolean> = combine(gyro.toggledOn, layout) { on, profile ->
+        on && motionSensor.isAvailable && profile.gyro.bindings.isNotEmpty()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Every profile, for the in-game menu. */
     val layouts: StateFlow<Layouts> = layoutRepository.layouts
@@ -73,6 +91,8 @@ class GamepadViewModel(
     fun onScreenShown() {
         sender.lowLatency = true
         screenMode.acquire()
+        shown = true
+        updateSensor(layout.value)
     }
 
     /** Leaving the screen must never leave a button held on the host. */
@@ -80,5 +100,27 @@ class GamepadViewModel(
         tracker.releaseAll()
         sender.lowLatency = false
         screenMode.release()
+        shown = false
+        updateSensor(layout.value)
+    }
+
+    override fun onCleared() {
+        shown = false
+        updateSensor(layout.value)
+    }
+
+    /** The sensor runs only while the gamepad is on screen and the profile uses gyro. */
+    private fun updateSensor(profile: LayoutProfile) {
+        val wanted = shown && motionSensor.isAvailable && profile.gyro.bindings.isNotEmpty()
+        if (wanted == sensorRunning) return
+        sensorRunning = wanted
+        if (wanted) {
+            gyro.start()
+            motionSensor.start(gyro::onSample)
+        } else {
+            // Stop returns once no sample is in flight, so nothing lands after the output is cleared.
+            motionSensor.stop()
+            gyro.stop()
+        }
     }
 }

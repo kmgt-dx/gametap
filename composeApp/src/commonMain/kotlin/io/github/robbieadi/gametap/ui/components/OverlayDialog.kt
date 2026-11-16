@@ -38,7 +38,7 @@ fun OverlayDialog(
     Box(
         Modifier
             .fillMaxSize()
-            .consumeAllTouches()
+            .consumeTouchDowns()
             .background(GamepadColors.Background.copy(alpha = 0.8f))
             .clickable(interactionSource = null, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
